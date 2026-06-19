@@ -70,6 +70,7 @@ struct State {
     screen_dc: HDC,
     mem_dc: HDC,
     bitmap: HBITMAP,
+    default_bitmap: HGDIOBJ, // stock bitmap first selected into mem_dc
     bits: *mut u32, // top-down BGRA pixels, size*size of them
     size: i32,      // square window side, in pixels
     x: i32,         // window left, in screen pixels
@@ -78,8 +79,9 @@ struct State {
     tick: u64,
     face: usize,
     dragging: bool,
-    drag_anchor: POINT,    // cursor position when the drag began
+    drag_anchor: POINT,     // cursor position when the drag began
     win_anchor: (i32, i32), // window position when the drag began
+    wheel_accum: i32,       // leftover wheel delta below one resize step
 }
 
 // Single window, single thread: a plain pointer is enough and avoids the
@@ -99,7 +101,10 @@ impl State {
 
         let mut bits: *mut core::ffi::c_void = null_mut();
         let bitmap = CreateDIBSection(self.mem_dc, &bmi, DIB_RGB_COLORS, &mut bits, null_mut(), 0);
-        SelectObject(self.mem_dc, bitmap as HGDIOBJ);
+        let prev = SelectObject(self.mem_dc, bitmap as HGDIOBJ);
+        if self.default_bitmap.is_null() {
+            self.default_bitmap = prev; // remember the stock bitmap to restore at exit
+        }
         if !self.bitmap.is_null() {
             DeleteObject(self.bitmap as HGDIOBJ);
         }
@@ -251,8 +256,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_MOUSEWHEEL => {
             // Scroll up to grow, down to shrink (one notch == WHEEL_DELTA == 120).
+            // Accumulate so high-resolution wheels/touchpads (deltas < 120) still
+            // resize once enough motion adds up, instead of truncating to zero.
             let delta = ((wparam >> 16) as u16) as i16 as i32;
-            st.resize_to(st.size + delta * 16 / 120);
+            st.wheel_accum += delta;
+            let steps = st.wheel_accum / 120;
+            if steps != 0 {
+                st.wheel_accum -= steps * 120;
+                st.resize_to(st.size + steps * 16);
+            }
             0
         }
         WM_KEYDOWN => {
@@ -322,6 +334,7 @@ fn main() {
             screen_dc: GetDC(null_mut()),
             mem_dc: CreateCompatibleDC(null_mut()),
             bitmap: null_mut(),
+            default_bitmap: null_mut(),
             bits: null_mut(),
             size,
             x,
@@ -332,12 +345,18 @@ fn main() {
             dragging: false,
             drag_anchor: zeroed(),
             win_anchor: (x, y),
+            wheel_accum: 0,
         });
         state.make_dib(size);
         STATE = &mut *state;
 
         ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        // Try to take focus so the keyboard shortcuts work right away. Windows
+        // may deny foreground to a freshly launched process, in which case the
+        // first left-click on the pet (WM_LBUTTONDOWN) acquires it; right-click
+        // and scroll-to-resize work regardless of focus.
         SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
         state.render();
 
         SetTimer(hwnd, 1, 55, None); // ~18 fps
@@ -348,8 +367,12 @@ fn main() {
             DispatchMessageW(&msg);
         }
 
-        // Best-effort cleanup before exit.
+        // Best-effort cleanup before exit. Deselect our DIB (restoring the stock
+        // bitmap) before deleting it, so DeleteObject actually frees it.
         KillTimer(hwnd, 1);
+        if !state.default_bitmap.is_null() {
+            SelectObject(state.mem_dc, state.default_bitmap);
+        }
         if !state.bitmap.is_null() {
             DeleteObject(state.bitmap as HGDIOBJ);
         }
