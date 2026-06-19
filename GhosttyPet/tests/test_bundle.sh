@@ -17,12 +17,12 @@ fi
 otool -L "$APP_BINARY" | grep -q 'AppKit.framework'
 
 PET_VIEW_SOURCE="src/PetView.m"
-grep -q 'drawGhostInRect' "$PET_VIEW_SOURCE"
-# Body stored once, only the face rows animate (see PetView.m).
-grep -q 'kGhostBody' "$PET_VIEW_SOURCE"
-grep -q 'kGhostFaces' "$PET_VIEW_SOURCE"
-grep -q 'NSRectFill' "$PET_VIEW_SOURCE"
+# The ghost is computed by an SDF rasterizer and blitted as one CGImage.
+grep -q 'paint_ghost' "$PET_VIEW_SOURCE"
+grep -q 'CGImageCreate' "$PET_VIEW_SOURCE"
 
+# Stay asset-free: no bundled image/video/web rendering (CGImage of a computed
+# buffer is fine; NSImage/NSBitmapImageRep would imply loaded bitmaps).
 if grep -E 'NSImage|NSBitmapImageRep|AVPlayer|WebView' "$PET_VIEW_SOURCE"; then
   echo "PetView should stay vector-native and avoid image/video/web rendering" >&2
   exit 1

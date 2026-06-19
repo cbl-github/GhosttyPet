@@ -9,7 +9,7 @@ SOURCES := src/main.m src/PetView.m
 SDK := $(shell xcrun --show-sdk-path)
 CLANG := $(shell xcrun --find clang)
 CFLAGS := -fobjc-arc -Wall -Wextra -Werror -O2 -mmacosx-version-min=11.0 -isysroot $(SDK)
-LDFLAGS := -framework AppKit
+LDFLAGS := -framework AppKit -framework CoreGraphics
 
 .PHONY: all clean test run
 
