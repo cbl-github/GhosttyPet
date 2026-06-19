@@ -8,6 +8,10 @@
 enum { kGridWidth = 14, kGridHeight = 14 };
 enum { kFaceTop = 4, kFaceRows = 3 };  // the only rows that differ between frames
 
+// User-adjustable pet size (the square window's side, in points).
+static const CGFloat kMinPetSize = 80.0;
+static const CGFloat kMaxPetSize = 480.0;
+
 // The constant ghost body. The kFaceRows rows starting at kFaceTop are a plain
 // white belly here; they get overwritten per frame by kGhostFaces below.
 static const char *const kGhostBody[kGridHeight] = {
@@ -87,16 +91,34 @@ static const char *const kGhostFaces[4][kFaceRows] = {
     [NSColor.clearColor setFill];
     NSRectFill(self.bounds);
 
-    CGFloat bounce = sin(self.phase * 2.0) * 5.0;
-    CGFloat pulse = 1.0 + sin(self.phase * 1.4) * 0.02;
+    NSRect bounds = self.bounds;
+    NSWindow *window = self.window;
+    CGFloat scale = (window != nil) ? window.backingScaleFactor : 1.0;
+    if (scale < 1.0) {
+      scale = 1.0;
+    }
 
-    // Square, centered drawing area so the pixels stay square.
-    CGFloat side = (MIN(NSWidth(self.bounds), NSHeight(self.bounds)) - 24.0) * pulse;
-    if (side < 1.0) {
+    // Size every cell to a whole number of device pixels so the art stays crisp
+    // at any window size, and reserve ~20% of the box as headroom for the hop.
+    // The grid side is therefore an exact multiple of the cell size.
+    CGFloat box = MIN(NSWidth(bounds), NSHeight(bounds)) * 0.80;
+    CGFloat cellPx = floor(box * scale / (CGFloat)kGridWidth);
+    if (cellPx < 1.0) {
       return;  // window too small to draw a meaningful ghost
     }
-    NSRect petRect = NSMakeRect(NSMidX(self.bounds) - side / 2.0,
-                                NSMidY(self.bounds) - side / 2.0 + bounce,
+    CGFloat cell = cellPx / scale;
+    CGFloat side = cell * (CGFloat)kGridWidth;
+
+    // Pixel-style hop: a bouncing arc quantized to whole device pixels, so the
+    // ghost jumps in crisp steps instead of gliding through sub-pixel positions.
+    CGFloat hopPx = floor(cellPx * 2.0);  // up to ~2 cells high
+    CGFloat hopOffsetPx = round(fabs(sin(self.phase * 1.6)) * hopPx);
+
+    // Center the hop arc on the view, every coordinate snapped to the pixel grid.
+    CGFloat originXPx = round((NSMidX(bounds) - side / 2.0) * scale);
+    CGFloat restYPx = round((NSMidY(bounds) - side / 2.0) * scale - hopPx / 2.0);
+    NSRect petRect = NSMakeRect(originXPx / scale,
+                                (restYPx + hopOffsetPx) / scale,
                                 side, side);
 
     [self drawGhostInRect:petRect];
@@ -113,9 +135,9 @@ static const char *const kGhostFaces[4][kFaceRows] = {
     return;
   }
 
-  // Wrap at 10*pi -- the smallest phase where both sin(phase*2) and
-  // sin(phase*1.4) complete whole cycles, so the wrap is seamless and phase
-  // never grows large enough to lose float precision.
+  // Wrap at 10*pi, where sin(phase*1.6) completes whole cycles (16*pi is eight
+  // full periods), so the wrap is seamless and phase never grows large enough to
+  // lose float precision.
   self.phase += 0.12;
   if (self.phase >= 10.0 * M_PI) {
     self.phase -= 10.0 * M_PI;
@@ -213,12 +235,50 @@ static const char *const kGhostFaces[4][kFaceRows] = {
   [NSApp terminate:nil];
 }
 
+// Resize the square pet about its center, clamped to the allowed range.
+- (void)resizePetToSide:(CGFloat)side {
+  side = MAX(kMinPetSize, MIN(kMaxPetSize, side));
+  NSWindow *window = self.window;
+  if (window == nil) {
+    return;
+  }
+  NSRect frame = window.frame;
+  NSRect next = NSMakeRect(round(NSMidX(frame) - side / 2.0),
+                           round(NSMidY(frame) - side / 2.0), side, side);
+  [window setFrame:next display:YES];
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+  // Scroll up to grow, down to shrink. Line-based wheels report small deltas,
+  // so scale those up for a comparable feel to a precise trackpad.
+  CGFloat step = event.scrollingDeltaY;
+  if (!event.hasPreciseScrollingDeltas) {
+    step *= 6.0;
+  }
+  [self resizePetToSide:NSWidth(self.window.frame) + step];
+}
+
+- (void)magnifyWithEvent:(NSEvent *)event {
+  [self resizePetToSide:NSWidth(self.window.frame) * (1.0 + event.magnification)];
+}
+
 - (void)keyDown:(NSEvent *)event {
   if (event.keyCode == 53 ||
       [event.charactersIgnoringModifiers isEqualToString:@"\033"]) {
     [NSApp terminate:nil];
     return;
   }
+
+  NSString *chars = event.charactersIgnoringModifiers;
+  if ([chars isEqualToString:@"+"] || [chars isEqualToString:@"="]) {
+    [self resizePetToSide:NSWidth(self.window.frame) + 24.0];
+    return;
+  }
+  if ([chars isEqualToString:@"-"] || [chars isEqualToString:@"_"]) {
+    [self resizePetToSide:NSWidth(self.window.frame) - 24.0];
+    return;
+  }
+
   [super keyDown:event];
 }
 
