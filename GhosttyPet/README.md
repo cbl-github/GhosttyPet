@@ -17,15 +17,17 @@ open GhosttyPet/build/GhosttyPet.app
 ## Controls
 
 - Drag with the left mouse button.
+- Resize by scrolling over the pet, pinching on a trackpad, or pressing `+` / `-` when it has focus.
 - Quit with right-click.
 - Quit with Escape when the pet has focus.
 
 ## Notes
 
-The ghost is drawn as a 14x14 pixel grid of square cells (`NSRectFill`, antialiasing off for crisp edges), with four animated faces — `>-`, `>>`, `@@`, `--` — plus a gentle bounce and scale pulse. The app uses native Objective-C/AppKit only. It does not use Electron, WebView, AVFoundation playback, or image frame atlases — the pixels are computed, not loaded from a bitmap.
+The ghost is drawn as a 14x14 pixel grid of square cells (`NSRectFill`, antialiasing off for crisp edges), with four animated faces — `>-`, `>>`, `@@`, `--` — plus a pixel-quantized hop. The app uses native Objective-C/AppKit only. It does not use Electron, WebView, AVFoundation playback, or image frame atlases — the pixels are computed, not loaded from a bitmap.
 
 Performance notes:
 
+- Cells are sized to a whole number of device pixels and the hop is snapped to the pixel grid, so the art stays crisp and bounces in retro steps at any window size.
 - Only the eyes animate, so the body is stored **once** (`kGhostBody`) and only the three face rows vary between frames (`kGhostFaces`) — no duplicated frame copies.
 - Each repaint groups cells by color and emits just three `NSRectFillList` calls (instead of ~200 per-cell fills) from stack buffers, so drawing allocates nothing on the heap.
 - The animation timer holds a **weak** reference to the view, so there is no retain cycle.
