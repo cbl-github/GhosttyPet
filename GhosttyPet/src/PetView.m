@@ -1,72 +1,38 @@
 #import "PetView.h"
 
-// Pixel-art ghost rendered as a grid of square cells.
+// Pixel-art ghost rendered as a grid of square cells. Only the eyes move, so we
+// store the body once (kGhostBody) and keep just the three differing face rows
+// per frame (kGhostFaces) -- the four "frames" cost almost no extra memory.
 // Legend: 'b' bright Ghostty blue (outer rim), 'k' black (inner outline + face),
-//         'w' white (body fill), 'd' dark blue (optional shade), '.' transparent.
-// Four animation frames differ ONLY in the face rows (4-6); the body is identical.
+//         'w' white (body fill), '.' transparent.
 enum { kGridWidth = 14, kGridHeight = 14 };
+enum { kFaceTop = 4, kFaceRows = 3 };  // the only rows that differ between frames
 
-static const char *const kGhostFrames[4][kGridHeight] = {
-    {// face ">-"
-     "...bbbbbbbb...",
-     "..bkkkkkkkkb..",
-     ".bkwwwwwwwwkb.",
-     "bkwwwwwwwwwwkb",
-     "bkwkwwwwwwwwkb",
-     "bkwwkwwwkkkwkb",
-     "bkwkwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwkwwkkwwkwkb",
-     ".kk.kk..kk.kk.",
-     ".bb.bb..bb.bb."},
-    {// face ">>"
-     "...bbbbbbbb...",
-     "..bkkkkkkkkb..",
-     ".bkwwwwwwwwkb.",
-     "bkwwwwwwwwwwkb",
-     "bkwkwwwwwkwwkb",
-     "bkwwkwwwwwkwkb",
-     "bkwkwwwwwkwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwkwwkkwwkwkb",
-     ".kk.kk..kk.kk.",
-     ".bb.bb..bb.bb."},
-    {// face "@@"
-     "...bbbbbbbb...",
-     "..bkkkkkkkkb..",
-     ".bkwwwwwwwwkb.",
-     "bkwwwwwwwwwwkb",
-     "bkwkkkwwkkkwkb",
-     "bkwkwkwwkwkwkb",
-     "bkwkkkwwkkkwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwkwwkkwwkwkb",
-     ".kk.kk..kk.kk.",
-     ".bb.bb..bb.bb."},
-    {// face "--"
-     "...bbbbbbbb...",
-     "..bkkkkkkkkb..",
-     ".bkwwwwwwwwkb.",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwkkkwwkkkwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwwwwwwwwwwkb",
-     "bkwkwwkkwwkwkb",
-     ".kk.kk..kk.kk.",
-     ".bb.bb..bb.bb."},
+// The constant ghost body. The kFaceRows rows starting at kFaceTop are a plain
+// white belly here; they get overwritten per frame by kGhostFaces below.
+static const char *const kGhostBody[kGridHeight] = {
+    "...bbbbbbbb...",
+    "..bkkkkkkkkb..",
+    ".bkwwwwwwwwkb.",
+    "bkwwwwwwwwwwkb",
+    "bkwwwwwwwwwwkb",
+    "bkwwwwwwwwwwkb",
+    "bkwwwwwwwwwwkb",
+    "bkwwwwwwwwwwkb",
+    "bkwwwwwwwwwwkb",
+    "bkwwwwwwwwwwkb",
+    "bkwwwwwwwwwwkb",
+    "bkwkwwkkwwkwkb",
+    ".kk.kk..kk.kk.",
+    ".bb.bb..bb.bb.",
+};
+
+// The only animated pixels: four eye/face variants (">-", ">>", "@@", "--").
+static const char *const kGhostFaces[4][kFaceRows] = {
+    {"bkwkwwwwwwwwkb", "bkwwkwwwkkkwkb", "bkwkwwwwwwwwkb"},  // ">-"
+    {"bkwkwwwwwkwwkb", "bkwwkwwwwwkwkb", "bkwkwwwwwkwwkb"},  // ">>"
+    {"bkwkkkwwkkkwkb", "bkwkwkwwkwkwkb", "bkwkkkwwkkkwkb"},  // "@@"
+    {"bkwwwwwwwwwwkb", "bkwkkkwwkkkwkb", "bkwwwwwwwwwwkb"},  // "--"
 };
 
 @interface PetView ()
@@ -87,12 +53,18 @@ static const char *const kGhostFrames[4][kGridHeight] = {
     self.tickCount = 0;
     self.faceIndex = 0;
 
+    // Block timer with a weak self so the timer does not retain the view: that
+    // breaks the view<->timer retain cycle and lets -dealloc actually run.
+    // Common run-loop modes keep the animation alive during drag tracking.
+    __weak PetView *weakSelf = self;
     self.animationTimer = [NSTimer timerWithTimeInterval:(1.0 / 18.0)
-                                                  target:self
-                                                selector:@selector(animationTick:)
-                                                userInfo:nil
-                                                 repeats:YES];
+                                                 repeats:YES
+                                                   block:^(NSTimer *timer) {
+                                                     [weakSelf animationTick:timer];
+                                                   }];
     [NSRunLoop.mainRunLoop addTimer:self.animationTimer forMode:NSRunLoopCommonModes];
+    // Slack lets the OS coalesce these wakeups with others and cut idle power.
+    self.animationTimer.tolerance = (1.0 / 18.0) * 0.1;
   }
   return self;
 }
@@ -132,51 +104,56 @@ static const char *const kGhostFrames[4][kGridHeight] = {
 }
 
 - (void)animationTick:(NSTimer *)timer {
-  @autoreleasepool {
-    (void)timer;
-    self.phase += 0.12;
-    self.tickCount += 1;
-    if (self.tickCount % 54 == 0) {
-      self.faceIndex = (self.faceIndex + 1) % 4;
-    }
-    self.needsDisplay = YES;
-  }
-}
+  (void)timer;
 
-- (NSColor *)colorForPixel:(char)pixel {
-  static NSColor *blue;
-  static NSColor *shade;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    blue = [NSColor colorWithCalibratedRed:0.02 green:0.05 blue:0.95 alpha:1.0];
-    shade = [NSColor colorWithCalibratedRed:0.01 green:0.02 blue:0.55 alpha:1.0];
-  });
-
-  switch (pixel) {
-  case 'b':
-    return blue;
-  case 'k':
-    return NSColor.blackColor;
-  case 'w':
-    return NSColor.whiteColor;
-  case 'd':
-    return shade;
-  default:
-    return nil;  // '.' transparent
+  // Don't spend CPU animating a pet nobody can see (another Space, behind a
+  // fullscreen app, minimized...). The tick resumes cleanly once it's visible.
+  NSWindow *window = self.window;
+  if (window && !(window.occlusionState & NSWindowOcclusionStateVisible)) {
+    return;
   }
+
+  // Wrap at 10*pi -- the smallest phase where both sin(phase*2) and
+  // sin(phase*1.4) complete whole cycles, so the wrap is seamless and phase
+  // never grows large enough to lose float precision.
+  self.phase += 0.12;
+  if (self.phase >= 10.0 * M_PI) {
+    self.phase -= 10.0 * M_PI;
+  }
+  self.tickCount += 1;
+  if (self.tickCount % 54 == 0) {
+    self.faceIndex = (self.faceIndex + 1) % 4;
+  }
+  self.needsDisplay = YES;
 }
 
 - (void)drawGhostInRect:(NSRect)rect {
+  static NSColor *blue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    blue = [NSColor colorWithCalibratedRed:0.02 green:0.05 blue:0.95 alpha:1.0];
+  });
+
   NSGraphicsContext *context = NSGraphicsContext.currentContext;
   BOOL savedAntialias = context.shouldAntialias;
   context.shouldAntialias = NO;  // crisp pixel edges, no seams
 
+  // Group the cells by color and flush each color in one NSRectFillList call
+  // instead of a setFill + fill per cell -- ~200 fills become three. The
+  // buffers live on the stack, so a repaint allocates and frees nothing.
+  NSRect blueRects[kGridWidth * kGridHeight];
+  NSRect blackRects[kGridWidth * kGridHeight];
+  NSRect whiteRects[kGridWidth * kGridHeight];
+  NSInteger blueCount = 0, blackCount = 0, whiteCount = 0;
+
   for (NSInteger row = 0; row < kGridHeight; row++) {
-    const char *line = kGhostFrames[self.faceIndex][row];
+    BOOL faceRow = (row >= kFaceTop && row < kFaceTop + kFaceRows);
+    const char *line =
+        faceRow ? kGhostFaces[self.faceIndex][row - kFaceTop] : kGhostBody[row];
     for (NSInteger col = 0; col < kGridWidth; col++) {
-      NSColor *color = [self colorForPixel:line[col]];
-      if (color == nil) {
-        continue;
+      char pixel = line[col];
+      if (pixel == '.') {
+        continue;  // transparent
       }
 
       // Cumulative boundaries so adjacent cells tile exactly (no gaps).
@@ -187,11 +164,30 @@ static const char *const kGhostFrames[4][kGridHeight] = {
           NSMinY(rect) + NSHeight(rect) * (CGFloat)(kGridHeight - 1 - row) / (CGFloat)kGridHeight;
       CGFloat y1 =
           NSMinY(rect) + NSHeight(rect) * (CGFloat)(kGridHeight - row) / (CGFloat)kGridHeight;
+      NSRect cell = NSMakeRect(x0, y0, x1 - x0, y1 - y0);
 
-      [color setFill];
-      NSRectFill(NSMakeRect(x0, y0, x1 - x0, y1 - y0));
+      switch (pixel) {
+      case 'b':
+        blueRects[blueCount++] = cell;
+        break;
+      case 'k':
+        blackRects[blackCount++] = cell;
+        break;
+      case 'w':
+        whiteRects[whiteCount++] = cell;
+        break;
+      default:
+        break;
+      }
     }
   }
+
+  [blue setFill];
+  NSRectFillList(blueRects, blueCount);
+  [NSColor.blackColor setFill];
+  NSRectFillList(blackRects, blackCount);
+  [NSColor.whiteColor setFill];
+  NSRectFillList(whiteRects, whiteCount);
 
   context.shouldAntialias = savedAntialias;
 }
