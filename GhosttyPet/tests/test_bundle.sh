@@ -18,7 +18,9 @@ otool -L "$APP_BINARY" | grep -q 'AppKit.framework'
 
 PET_VIEW_SOURCE="src/PetView.m"
 grep -q 'drawGhostInRect' "$PET_VIEW_SOURCE"
-grep -q 'kGhostFrames' "$PET_VIEW_SOURCE"
+# Body stored once, only the face rows animate (see PetView.m).
+grep -q 'kGhostBody' "$PET_VIEW_SOURCE"
+grep -q 'kGhostFaces' "$PET_VIEW_SOURCE"
 grep -q 'NSRectFill' "$PET_VIEW_SOURCE"
 
 if grep -E 'NSImage|NSBitmapImageRep|AVPlayer|WebView' "$PET_VIEW_SOURCE"; then
