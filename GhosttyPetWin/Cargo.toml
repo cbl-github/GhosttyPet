@@ -1,0 +1,27 @@
+[package]
+name = "ghostty_pet"
+version = "0.1.0"
+edition = "2021"
+description = "A tiny Windows desktop pet: a pixel-art ghost, drawn natively with the Win32 API."
+
+[[bin]]
+name = "GhosttyPet"
+path = "src/main.rs"
+
+# Tuned for a small, low-footprint binary.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[dependencies.windows-sys]
+version = "0.59"
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_LibraryLoader",
+]
