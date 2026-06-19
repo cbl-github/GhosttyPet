@@ -1,6 +1,6 @@
 # GhosttyPet
 
-A tiny macOS desktop pet inspired by the clean Ghostty source animation.
+A tiny macOS desktop pet: a pixel-art ghost inspired by Ghostty, rendered as crisp blocky cells.
 
 ## Build
 
@@ -22,4 +22,4 @@ open GhosttyPet/build/GhosttyPet.app
 
 ## Notes
 
-The app uses native Objective-C/AppKit and CoreGraphics-style vector drawing. It does not use Electron, WebView, AVFoundation playback, or image frame atlases.
+The ghost is drawn as a 14x14 pixel grid of square cells (`NSRectFill`, antialiasing off for crisp edges), with four animated faces — `>-`, `>>`, `@@`, `--` — plus a gentle bounce and scale pulse. The app uses native Objective-C/AppKit only. It does not use Electron, WebView, AVFoundation playback, or image frame atlases — the pixels are computed, not loaded from a bitmap.

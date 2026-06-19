@@ -1,5 +1,74 @@
 #import "PetView.h"
 
+// Pixel-art ghost rendered as a grid of square cells.
+// Legend: 'b' bright Ghostty blue (outer rim), 'k' black (inner outline + face),
+//         'w' white (body fill), 'd' dark blue (optional shade), '.' transparent.
+// Four animation frames differ ONLY in the face rows (4-6); the body is identical.
+enum { kGridWidth = 14, kGridHeight = 14 };
+
+static const char *const kGhostFrames[4][kGridHeight] = {
+    {// face ">-"
+     "...bbbbbbbb...",
+     "..bkkkkkkkkb..",
+     ".bkwwwwwwwwkb.",
+     "bkwwwwwwwwwwkb",
+     "bkwkwwwwwwwwkb",
+     "bkwwkwwwkkkwkb",
+     "bkwkwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwkwwkkwwkwkb",
+     ".kk.kk..kk.kk.",
+     ".bb.bb..bb.bb."},
+    {// face ">>"
+     "...bbbbbbbb...",
+     "..bkkkkkkkkb..",
+     ".bkwwwwwwwwkb.",
+     "bkwwwwwwwwwwkb",
+     "bkwkwwwwwkwwkb",
+     "bkwwkwwwwwkwkb",
+     "bkwkwwwwwkwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwkwwkkwwkwkb",
+     ".kk.kk..kk.kk.",
+     ".bb.bb..bb.bb."},
+    {// face "@@"
+     "...bbbbbbbb...",
+     "..bkkkkkkkkb..",
+     ".bkwwwwwwwwkb.",
+     "bkwwwwwwwwwwkb",
+     "bkwkkkwwkkkwkb",
+     "bkwkwkwwkwkwkb",
+     "bkwkkkwwkkkwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwkwwkkwwkwkb",
+     ".kk.kk..kk.kk.",
+     ".bb.bb..bb.bb."},
+    {// face "--"
+     "...bbbbbbbb...",
+     "..bkkkkkkkkb..",
+     ".bkwwwwwwwwkb.",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwkkkwwkkkwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwwwwwwwwwwkb",
+     "bkwkwwkkwwkwkb",
+     ".kk.kk..kk.kk.",
+     ".bb.bb..bb.bb."},
+};
+
 @interface PetView ()
 @property(nonatomic, strong) NSTimer *animationTimer;
 @property(nonatomic) CGFloat phase;
@@ -47,12 +116,16 @@
     NSRectFill(self.bounds);
 
     CGFloat bounce = sin(self.phase * 2.0) * 5.0;
-    CGFloat pulse = 1.0 + sin(self.phase * 1.4) * 0.018;
-    NSRect petRect = NSInsetRect(self.bounds, 26, 22);
-    petRect.origin.y += bounce;
-    CGFloat widthDelta = petRect.size.width * (pulse - 1.0);
-    CGFloat heightDelta = petRect.size.height * (pulse - 1.0);
-    petRect = NSInsetRect(petRect, -widthDelta / 2.0, -heightDelta / 2.0);
+    CGFloat pulse = 1.0 + sin(self.phase * 1.4) * 0.02;
+
+    // Square, centered drawing area so the pixels stay square.
+    CGFloat side = (MIN(NSWidth(self.bounds), NSHeight(self.bounds)) - 24.0) * pulse;
+    if (side < 1.0) {
+      return;  // window too small to draw a meaningful ghost
+    }
+    NSRect petRect = NSMakeRect(NSMidX(self.bounds) - side / 2.0,
+                                NSMidY(self.bounds) - side / 2.0 + bounce,
+                                side, side);
 
     [self drawGhostInRect:petRect];
   }
@@ -70,141 +143,57 @@
   }
 }
 
-- (NSPoint)pointInRect:(NSRect)rect x:(CGFloat)x y:(CGFloat)y {
-  return NSMakePoint(NSMinX(rect) + NSWidth(rect) * x,
-                     NSMinY(rect) + NSHeight(rect) * y);
-}
-
-- (NSBezierPath *)ghostBodyPathInRect:(NSRect)rect {
-  NSBezierPath *path = [NSBezierPath bezierPath];
-  [path moveToPoint:[self pointInRect:rect x:0.50 y:0.96]];
-  [path curveToPoint:[self pointInRect:rect x:0.12 y:0.56]
-       controlPoint1:[self pointInRect:rect x:0.26 y:0.96]
-       controlPoint2:[self pointInRect:rect x:0.12 y:0.82]];
-  [path lineToPoint:[self pointInRect:rect x:0.12 y:0.30]];
-  [path curveToPoint:[self pointInRect:rect x:0.24 y:0.18]
-       controlPoint1:[self pointInRect:rect x:0.12 y:0.22]
-       controlPoint2:[self pointInRect:rect x:0.17 y:0.14]];
-  [path curveToPoint:[self pointInRect:rect x:0.38 y:0.18]
-       controlPoint1:[self pointInRect:rect x:0.29 y:0.22]
-       controlPoint2:[self pointInRect:rect x:0.33 y:0.22]];
-  [path curveToPoint:[self pointInRect:rect x:0.50 y:0.18]
-       controlPoint1:[self pointInRect:rect x:0.42 y:0.14]
-       controlPoint2:[self pointInRect:rect x:0.46 y:0.14]];
-  [path curveToPoint:[self pointInRect:rect x:0.62 y:0.18]
-       controlPoint1:[self pointInRect:rect x:0.54 y:0.22]
-       controlPoint2:[self pointInRect:rect x:0.58 y:0.22]];
-  [path curveToPoint:[self pointInRect:rect x:0.76 y:0.18]
-       controlPoint1:[self pointInRect:rect x:0.67 y:0.14]
-       controlPoint2:[self pointInRect:rect x:0.71 y:0.14]];
-  [path curveToPoint:[self pointInRect:rect x:0.88 y:0.30]
-       controlPoint1:[self pointInRect:rect x:0.83 y:0.14]
-       controlPoint2:[self pointInRect:rect x:0.88 y:0.22]];
-  [path lineToPoint:[self pointInRect:rect x:0.88 y:0.56]];
-  [path curveToPoint:[self pointInRect:rect x:0.50 y:0.96]
-       controlPoint1:[self pointInRect:rect x:0.88 y:0.82]
-       controlPoint2:[self pointInRect:rect x:0.74 y:0.96]];
-  [path closePath];
-  return path;
-}
-
-- (void)strokeLineFrom:(NSPoint)start to:(NSPoint)end width:(CGFloat)width {
-  NSBezierPath *line = [NSBezierPath bezierPath];
-  line.lineCapStyle = NSLineCapStyleRound;
-  line.lineJoinStyle = NSLineJoinStyleRound;
-  [line setLineWidth:width];
-  [line moveToPoint:start];
-  [line lineToPoint:end];
-  [line stroke];
-}
-
-- (void)drawChevronInRect:(NSRect)rect centerX:(CGFloat)x centerY:(CGFloat)y scale:(CGFloat)scale {
-  CGFloat w = NSWidth(rect) * 0.13 * scale;
-  CGFloat h = NSHeight(rect) * 0.11 * scale;
-  CGFloat cx = NSMinX(rect) + NSWidth(rect) * x;
-  CGFloat cy = NSMinY(rect) + NSHeight(rect) * y;
-  CGFloat lineWidth = NSWidth(rect) * 0.052 * scale;
-
-  NSBezierPath *path = [NSBezierPath bezierPath];
-  path.lineCapStyle = NSLineCapStyleRound;
-  path.lineJoinStyle = NSLineJoinStyleRound;
-  [path setLineWidth:lineWidth];
-  [path moveToPoint:NSMakePoint(cx - w / 2.0, cy + h / 2.0)];
-  [path lineToPoint:NSMakePoint(cx + w / 2.0, cy)];
-  [path lineToPoint:NSMakePoint(cx - w / 2.0, cy - h / 2.0)];
-  [path stroke];
-}
-
-- (void)drawDashInRect:(NSRect)rect centerX:(CGFloat)x centerY:(CGFloat)y {
-  CGFloat cx = NSMinX(rect) + NSWidth(rect) * x;
-  CGFloat cy = NSMinY(rect) + NSHeight(rect) * y;
-  CGFloat halfWidth = NSWidth(rect) * 0.08;
-  CGFloat lineWidth = NSWidth(rect) * 0.052;
-  [self strokeLineFrom:NSMakePoint(cx - halfWidth, cy)
-                    to:NSMakePoint(cx + halfWidth, cy)
-                 width:lineWidth];
-}
-
-- (void)drawAtFaceInRect:(NSRect)rect {
-  NSString *text = @"@@";
-  static NSDictionary<NSAttributedStringKey, id> *attrs;
+- (NSColor *)colorForPixel:(char)pixel {
+  static NSColor *blue;
+  static NSColor *shade;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
-    attrs = @{
-      NSFontAttributeName: [NSFont monospacedSystemFontOfSize:44.0 weight:NSFontWeightBlack],
-      NSForegroundColorAttributeName: NSColor.blackColor
-    };
+    blue = [NSColor colorWithCalibratedRed:0.02 green:0.05 blue:0.95 alpha:1.0];
+    shade = [NSColor colorWithCalibratedRed:0.01 green:0.02 blue:0.55 alpha:1.0];
   });
-  NSSize size = [text sizeWithAttributes:attrs];
-  NSPoint point = NSMakePoint(NSMidX(rect) - size.width / 2.0,
-                              NSMinY(rect) + NSHeight(rect) * 0.49);
-  [text drawAtPoint:point withAttributes:attrs];
-}
 
-- (void)drawGhostFaceInRect:(NSRect)rect {
-  [NSColor.blackColor setStroke];
-  [NSColor.blackColor setFill];
-
-  switch (self.faceIndex) {
-  case 1:
-    [self drawChevronInRect:rect centerX:0.40 centerY:0.61 scale:1.0];
-    [self drawChevronInRect:rect centerX:0.64 centerY:0.61 scale:1.0];
-    break;
-  case 2:
-    [self drawAtFaceInRect:rect];
-    break;
-  case 3:
-    [self drawDashInRect:rect centerX:0.38 centerY:0.61];
-    [self drawDashInRect:rect centerX:0.64 centerY:0.61];
-    break;
+  switch (pixel) {
+  case 'b':
+    return blue;
+  case 'k':
+    return NSColor.blackColor;
+  case 'w':
+    return NSColor.whiteColor;
+  case 'd':
+    return shade;
   default:
-    [self drawChevronInRect:rect centerX:0.40 centerY:0.61 scale:1.0];
-    [self drawDashInRect:rect centerX:0.66 centerY:0.61];
-    break;
+    return nil;  // '.' transparent
   }
 }
 
 - (void)drawGhostInRect:(NSRect)rect {
-  NSBezierPath *body = [self ghostBodyPathInRect:rect];
+  NSGraphicsContext *context = NSGraphicsContext.currentContext;
+  BOOL savedAntialias = context.shouldAntialias;
+  context.shouldAntialias = NO;  // crisp pixel edges, no seams
 
-  static NSColor *blue;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    blue = [NSColor colorWithCalibratedRed:0.02 green:0.05 blue:0.95 alpha:1.0];
-  });
+  for (NSInteger row = 0; row < kGridHeight; row++) {
+    const char *line = kGhostFrames[self.faceIndex][row];
+    for (NSInteger col = 0; col < kGridWidth; col++) {
+      NSColor *color = [self colorForPixel:line[col]];
+      if (color == nil) {
+        continue;
+      }
 
-  [blue setStroke];
-  [body setLineWidth:26.0];
-  [body stroke];
+      // Cumulative boundaries so adjacent cells tile exactly (no gaps).
+      CGFloat x0 = NSMinX(rect) + NSWidth(rect) * (CGFloat)col / (CGFloat)kGridWidth;
+      CGFloat x1 = NSMinX(rect) + NSWidth(rect) * (CGFloat)(col + 1) / (CGFloat)kGridWidth;
+      // Row 0 is the TOP of the grid; AppKit's y axis grows upward.
+      CGFloat y0 =
+          NSMinY(rect) + NSHeight(rect) * (CGFloat)(kGridHeight - 1 - row) / (CGFloat)kGridHeight;
+      CGFloat y1 =
+          NSMinY(rect) + NSHeight(rect) * (CGFloat)(kGridHeight - row) / (CGFloat)kGridHeight;
 
-  [NSColor.blackColor setStroke];
-  [body setLineWidth:14.0];
-  [body stroke];
+      [color setFill];
+      NSRectFill(NSMakeRect(x0, y0, x1 - x0, y1 - y0));
+    }
+  }
 
-  [NSColor.whiteColor setFill];
-  [body fill];
-
-  [self drawGhostFaceInRect:rect];
+  context.shouldAntialias = savedAntialias;
 }
 
 - (void)mouseDown:(NSEvent *)event {

@@ -1,6 +1,6 @@
 # GhosttyPet
 
-Tiny macOS desktop pet inspired by Ghostty's clean source animation.
+Tiny macOS desktop pet: a pixel-art ghost inspired by Ghostty.
 
 ```sh
 make -C GhosttyPet

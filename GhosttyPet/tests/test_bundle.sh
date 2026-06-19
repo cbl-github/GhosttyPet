@@ -18,10 +18,10 @@ otool -L "$APP_BINARY" | grep -q 'AppKit.framework'
 
 PET_VIEW_SOURCE="src/PetView.m"
 grep -q 'drawGhostInRect' "$PET_VIEW_SOURCE"
-grep -q 'NSBezierPath' "$PET_VIEW_SOURCE"
-grep -q 'setLineWidth' "$PET_VIEW_SOURCE"
+grep -q 'kGhostFrames' "$PET_VIEW_SOURCE"
+grep -q 'NSRectFill' "$PET_VIEW_SOURCE"
 
-if grep -E 'NSImage|AVPlayer|WebView' "$PET_VIEW_SOURCE"; then
+if grep -E 'NSImage|NSBitmapImageRep|AVPlayer|WebView' "$PET_VIEW_SOURCE"; then
   echo "PetView should stay vector-native and avoid image/video/web rendering" >&2
   exit 1
 fi
